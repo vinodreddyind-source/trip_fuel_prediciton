@@ -35,7 +35,12 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Pull versioned data from DVC/S3
-        run: dvc pull
+        # Using "python -m dvc" rather than the bare "dvc" command - pip
+        # installs DVC's console script to a location that isn't always
+        # reliably on PATH in this runner environment, even though the
+        # package itself installed correctly. "python -m dvc" sidesteps
+        # that entirely since it only needs the package importable.
+        run: python -m dvc pull
 
       - name: Pull MLflow tracking DB from S3
         # The MLflow backend store is a local SQLite file. GitHub Actions
@@ -69,8 +74,8 @@ jobs:
       - name: Push updated data version to DVC/S3 (only if drift detected)
         if: steps.drift_check.outputs.exit_code == '1'
         run: |
-          dvc add data
-          dvc push
+          python -m dvc add data
+          python -m dvc push
 
       - name: Push MLflow tracking DB back to S3 (only if drift detected)
         if: steps.drift_check.outputs.exit_code == '1'
