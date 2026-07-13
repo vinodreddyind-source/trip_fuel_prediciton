@@ -40,7 +40,13 @@ jobs:
         # reliably on PATH in this runner environment, even though the
         # package itself installed correctly. "python -m dvc" sidesteps
         # that entirely since it only needs the package importable.
-        run: python -m dvc pull
+        #
+        # --force: on a fresh CI runner there's no local "unsaved work"
+        # worth protecting - the whole point of this step is to
+        # reconstruct the exact expected state from the S3 remote every
+        # time, so DVC's default safety check (meant to protect a
+        # developer's local machine) isn't the right behavior here.
+        run: python -m dvc pull --force
 
       - name: Pull MLflow tracking DB from S3
         # The MLflow backend store is a local SQLite file. GitHub Actions
