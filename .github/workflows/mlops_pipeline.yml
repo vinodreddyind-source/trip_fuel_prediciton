@@ -1,0 +1,91 @@
+name: MLOps Drift Check and Retrain
+
+# Scheduled weekly, plus a manual trigger for testing on demand
+on:
+  schedule:
+    - cron: "0 6 * * 1"   # every Monday 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write   # needed to commit updated data.dvc / model back to the repo
+
+env:
+  AWS_REGION: ap-south-2
+
+jobs:
+  drift-check-and-retrain:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Pull versioned data from DVC/S3
+        run: dvc pull
+
+      - name: Pull MLflow tracking DB from S3
+        # The MLflow backend store is a local SQLite file. GitHub Actions
+        # runners are fresh every run, so without this the registry would
+        # "forget" every previous run and model version. Pulling/pushing
+        # it explicitly to S3 keeps registry history persistent across
+        # runs - a real, honest tradeoff of using SQLite instead of a
+        # hosted DB (e.g. RDS) as the MLflow backend, which is the more
+        # typical production setup but adds cost/setup this project
+        # intentionally avoids.
+        run: |
+          aws s3 cp s3://trip-fuel-mlops-vinod/mlflow-artifacts/mlflow.db mlflow.db || \
+            echo "No existing mlflow.db in S3 yet - starting fresh"
+
+      - name: Run drift detection
+        id: drift_check
+        run: |
+          set +e
+          python detect_drift.py
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          set -e
+
+      - name: Incorporate new data (only if drift detected)
+        if: steps.drift_check.outputs.exit_code == '1'
+        run: python incorporate_new_data.py
+
+      - name: Retrain (only if drift detected)
+        if: steps.drift_check.outputs.exit_code == '1'
+        run: python train.py
+
+      - name: Push updated data version to DVC/S3 (only if drift detected)
+        if: steps.drift_check.outputs.exit_code == '1'
+        run: |
+          dvc add data
+          dvc push
+
+      - name: Push MLflow tracking DB back to S3 (only if drift detected)
+        if: steps.drift_check.outputs.exit_code == '1'
+        run: aws s3 cp mlflow.db s3://trip-fuel-mlops-vinod/mlflow-artifacts/mlflow.db
+
+      - name: Commit updated data pointer and model (only if drift detected)
+        if: steps.drift_check.outputs.exit_code == '1'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data.dvc models/trip_fuel_model.json
+          git diff --cached --quiet && echo "No changes to commit" || \
+            git commit -m "Automated retrain: drift detected, incorporated new data [skip ci]"
+          git push
+
+      - name: No drift detected
+        if: steps.drift_check.outputs.exit_code == '0'
+        run: echo "No drift detected this cycle - no retraining needed."

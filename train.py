@@ -42,11 +42,28 @@ else:
 
 df = pd.read_csv(DATA_DIR / "flights.csv", parse_dates=["date"])
 
-# --- Time-based split: train on 2023, test on 2024 (mirrors production reality) ---
-train = df[df["date"] < "2024-01-01"].copy()
-test  = df[df["date"] >= "2024-01-01"].copy()
-print(f"Train: {len(train)} flights (2023)")
-print(f"Test:  {len(test)} flights (2024)")
+# --- Rolling training window ---
+# Retraining on ALL history ever collected has a real failure mode: if a
+# new regime shift (e.g. a fleet retrofit) is a small fraction of total
+# history, it gets diluted into near-invisibility during training even
+# though it's exactly what the retrain was supposed to learn. A rolling
+# window keeps only the most recent N months, so a recent shift makes up
+# a meaningful share of the training signal rather than being drowned out
+# by years of now-less-relevant data.
+WINDOW_MONTHS = 15
+max_date = df["date"].max()
+window_start = max_date - pd.DateOffset(months=WINDOW_MONTHS)
+df = df[df["date"] >= window_start].copy()
+print(f"Rolling window: last {WINDOW_MONTHS} months ({window_start.date()} to {max_date.date()})")
+print(f"Rows in window: {len(df)} (older data excluded from this training run)")
+
+# --- Time-based split within the window: hold out the most recent ~15% ---
+split_date = df["date"].quantile(0.85)
+train = df[df["date"] < split_date].copy()
+test  = df[df["date"] >= split_date].copy()
+print(f"\nSplit date: {split_date.date()} (85th percentile within the window)")
+print(f"Train: {len(train)} flights")
+print(f"Test:  {len(test)} flights")
 
 # --- BASELINE: rolling historical average trip fuel by (route, aircraft type) ---
 # Computed ONLY from train data - this is what the real model has to beat.
@@ -74,8 +91,8 @@ CATEGORICAL = ["origin", "dest", "aircraft_type"]
 for col in CATEGORICAL:
     df[col] = df[col].astype("category")
 
-train = df[df["date"] < "2024-01-01"].copy()
-test = df[df["date"] >= "2024-01-01"].copy()
+train = df[df["date"] < split_date].copy()
+test = df[df["date"] >= split_date].copy()
 
 X_train, y_train = train[FEATURES + CATEGORICAL], train["actual_trip_fuel_kg"]
 X_test, y_test = test[FEATURES + CATEGORICAL], test["actual_trip_fuel_kg"]
