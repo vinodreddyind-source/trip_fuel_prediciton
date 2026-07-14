@@ -1,0 +1,37 @@
+name: CI - Lint and Smoke Test
+
+# Runs on every push and pull request - fast, code-level checks.
+# Deliberately separate from mlops_pipeline.yml (the weekly/manual
+# drift-triggered retrain workflow): this workflow answers "does a
+# push break anything," that one answers "has the model's real-world
+# performance degraded." Different questions, different cadence,
+# different triggers - conflating them into one workflow would mean
+# either running an expensive retrain on every trivial code change,
+# or not catching a broken import until the next scheduled drift check.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Run smoke tests
+        run: python -m pytest tests/ -v

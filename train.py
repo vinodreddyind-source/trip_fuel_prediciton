@@ -80,7 +80,7 @@ test["baseline_pred"] = test["baseline_pred"].fillna(train["actual_trip_fuel_kg"
 
 baseline_mae = mean_absolute_error(test["actual_trip_fuel_kg"], test["baseline_pred"])
 baseline_rmse = np.sqrt(mean_squared_error(test["actual_trip_fuel_kg"], test["baseline_pred"]))
-print(f"\n--- BASELINE (historical average lookup) ---")
+print("\n--- BASELINE (historical average lookup) ---")
 print(f"MAE:  {baseline_mae:,.0f} kg")
 print(f"RMSE: {baseline_rmse:,.0f} kg")
 
@@ -121,13 +121,13 @@ with mlflow.start_run(experiment_id=experiment_id) as run:
     model_mae = mean_absolute_error(y_test, pred)
     model_rmse = np.sqrt(mean_squared_error(y_test, pred))
 
-    print(f"\n--- MODEL (XGBoost) ---")
+    print("\n--- MODEL (XGBoost) ---")
     print(f"MAE:  {model_mae:,.0f} kg")
     print(f"RMSE: {model_rmse:,.0f} kg")
 
     improvement = (baseline_mae - model_mae) / baseline_mae * 100
     gate_passed = model_mae < baseline_mae
-    print(f"\n--- BACKTEST GATE ---")
+    print("\n--- BACKTEST GATE ---")
     print(f"Model improves MAE over baseline by {improvement:.1f}%")
     print(f"Deployment gate: {'PASS - model beats baseline' if gate_passed else 'FAIL - model does not beat baseline'}")
 
@@ -140,7 +140,7 @@ with mlflow.start_run(experiment_id=experiment_id) as run:
 
     # Feature importance - useful for explainability discussion
     importances = pd.Series(model.feature_importances_, index=FEATURES + CATEGORICAL).sort_values(ascending=False)
-    print(f"\n--- Feature importances ---")
+    print("\n--- Feature importances ---")
     print(importances.to_string())
     for feat, imp in importances.items():
         mlflow.log_metric(f"importance_{feat}", float(imp))
@@ -157,8 +157,8 @@ with mlflow.start_run(experiment_id=experiment_id) as run:
         print(f"\nModel registered as '{REGISTERED_MODEL_NAME}' v{registered.version} "
               f"and promoted to the 'production' alias")
     else:
-        print(f"\nGate FAILED - model logged for history but NOT registered/promoted. "
-              f"The currently-aliased 'production' model, if any, remains in place.")
+        print("\nGate FAILED - model logged for history but NOT registered/promoted. "
+              "The currently-aliased 'production' model, if any, remains in place.")
 
     # Save model and test predictions locally too - for the evaluation script
     # and for the FastAPI service, which loads directly from disk rather than
