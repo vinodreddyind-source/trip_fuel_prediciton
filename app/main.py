@@ -4,6 +4,7 @@ Loads the trained model once at startup, exposes /predict for single-flight
 lookups and /health for container orchestration readiness checks -
 mirrors the architecture in Section 8 of the Trip Fuel document.
 """
+from pathlib import Path
 from fastapi import FastAPI
 from pydantic import BaseModel
 import xgboost as xgb
@@ -11,8 +12,15 @@ import pandas as pd
 
 app = FastAPI(title="Trip Fuel Prediction Service")
 
+# Anchored to this file's own location, not the process's current working
+# directory - this previously relied on Docker's WORKDIR happening to line
+# up with a relative path, which broke when tested from a different
+# working directory (e.g. simulating the Lambda container's flattened
+# layout). Same fix already applied to train.py and the other scripts.
+MODEL_PATH = Path(__file__).resolve().parent / "models" / "trip_fuel_model.json"
+
 model = xgb.XGBRegressor()
-model.load_model("models/trip_fuel_model.json")
+model.load_model(str(MODEL_PATH))
 
 FEATURES = ["distance_nm", "takeoff_weight_klbs", "headwind_kt", "month", "day_of_week"]
 CATEGORICAL = ["origin", "dest", "aircraft_type"]

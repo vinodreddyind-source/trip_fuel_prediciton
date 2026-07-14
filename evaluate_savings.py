@@ -29,7 +29,7 @@ print(f"Total fuel burned across test set: {total_fuel:,.0f} kg")
 print(f"Excess fuel across flagged flights: {excess_fuel_flagged:,.0f} kg")
 print(f"\n>>> Potential savings (backtested): {savings_pct:.2f}% of total fuel <<<")
 
-print(f"\n--- Top 5 most flagged routes (worth prioritizing efficiency review) ---")
+print("\n--- Top 5 most flagged routes (worth prioritizing efficiency review) ---")
 route_summary = (
     test[test["flagged"]]
     .groupby(["origin", "dest", "aircraft_type"])
